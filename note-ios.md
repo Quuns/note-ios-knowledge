@@ -83,6 +83,117 @@ dispatch_queue_t serialQueue = dispatch_queue_create("serialQueue", DISPATCH_QUE
 dispatch_queue_t concurrentQueue = dispatch_queue_create("concurrentQueue", DISPATCH_QUEUE_CONCURRENT);
 ```
 
+### 其他函数
+
+#### 1. dispatch_once 是GCD提供的一次性线程安全执行API，保证传入的block在整个应用生命周期中只执行一次，且天然线程安全。
+- 确保任务只执行一次，无论在多少个线程中调用。
+- 用于初始化全局变量、单例模式等。
+
+> 底层原理：底层基于原子操作(CAS) + 轻量级锁/信号量 + 内存屏障实现。状态流转如下：
+> 1. 状态定义（dispatch_once_t 的值）
+> - 0（初始态）：未执行
+> - ~0（全 1，完成态）：已执行完成
+> - 中间值（锁状态）：执行中（加锁，其他线程等待）
+> 2. 关键点：
+> - 原子操作（CAS/OSAtomic）
+>   - 保证对 predicate 的读 / 改 / 写原子性，避免多线程竞争导致的重复执行。
+> - 内存屏障（Memory Barrier）
+>   - 防止编译器 / CPU 指令重排，保证 block 内的初始化操作先于 predicate 标记完成，避免 “半初始化” 状态被其他线程看到。
+> - 轻量级等待（休眠 + 唤醒）
+>   - 未抢到锁的线程休眠（不耗 CPU），等执行完成后被唤醒，比 @synchronized 或 pthread_mutex 更高效
+>
+
+```objc
+// 经典用法
++ (instancetype)sharedInstance {
+    dispatch_once_t onceToken;
+    static id instance = nil;
+    dispatch_once(&onceToken, ^{
+        // 代码只执行一次
+        instance = [[self alloc] init];
+    });
+    return instance;
+}
+```
+
+#### 2. dispatch_barrier 是 GCD 中专为并发队列设计的线程同步工具，核心作用：像栅栏一样挡住前面的异步任务，等它们全部执行完，再执行自己，自己执行完后，后面的异步任务才继续执行。
+
+- dispatch_barrier_async (建议使用)
+  - 异步栅栏，确保在栅栏前的所有任务执行完成后，再执行栅栏内的任务。**不阻塞当前线程**。
+- dispatch_barrier_sync (不建议使用)
+  - 同步栅栏，确保在栅栏前的所有任务执行完成后，再执行栅栏内的任务。**阻塞当前线程**。
+
+Q: 为什么不能用全局并发队列？
+
+A: 系统全局队列（dispatch_get_global_queue）整个系统共用，你加栅栏会阻塞系统任务，所以 Apple 直接让栅栏失效，保证系统安全。
+
+**注意**：栅栏任务不要做耗时操作，会卡住整个队列
+
+##### 底层核心原理（深度讲解）
+
+1. 队列结构
+GCD 并发队列内部维护 2 个链表：
+- 普通任务链表
+- 栅栏任务链表
+
+2. 调度规则
+- 只要栅栏未执行，后面的所有普通任务都不会被调度
+- 栅栏执行的条件：
+    - 前面普通任务 全部完成
+    - 队列中 无其他任务执行
+- 栅栏执行时：
+    - 队列临时变成串行，只执行栅栏
+- 栅栏完成后：
+    - 恢复并发模式，调度后面的普通任务
+
+```objc
+// 最经典使用场景：线程安全的多读单写
+// 需求
+// 读操作：可以多线程并发执行（提高性能）
+// 写操作：必须单独执行，不能和任何任务并发（防止数据错乱）
+// 1. 创建【自定义并发队列】（关键！）
+dispatch_queue_t _safeQueue = dispatch_queue_create("com.example.safeQueue", DISPATCH_QUEUE_CONCURRENT);
+
+// 读操作：普通异步，并发执行
+- (id)objectForKey:(NSString *)key {
+    __block id obj;
+    dispatch_sync(_safeQueue, ^{  // 同步等待结果
+        obj = [self.dict objectForKey:key];
+    });
+    return obj;
+}
+
+// 写操作：栅栏函数，独占执行
+- (void)setObject:(id)obj forKey:(NSString *)key {
+    // 栅栏：写的时候，前面所有读都执行完，再写，写完再允许读
+    dispatch_barrier_async(_safeQueue, ^{
+        [self.dict setObject:obj forKey:key];
+    });
+}
+```
+
+#### 待完善 3. dispatch_group 是GCD提供的一种同步提交任务的方式，确保在提交任务前，所有正在执行的任务都已完成。
+```objc
+// 示例
+dispatch_group_t group = dispatch_group_create();
+dispatch_group_enter(group);
+dispatch_group_leave(group);
+dispatch_group_wait(group, dispatch_get_main_queue());
+NSLog(@"group");
+```
+
+#### 待完善 4. dispatch_semaphore 是GCD提供的一种同步提交任务的方式，确保在提交任务前，所有正在执行的任务都已完成。
+```objc
+// 示例
+dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+dispatch_semaphore_wait(semaphore, dispatch_get_main_queue());
+NSLog(@"semaphore");
+```
+
+#### 待完善 5.dispatch_source 是 GCD 提供的事件驱动型内核事件监控工具，底层封装了 XNU 内核的 kqueue/Mach port，用于无轮询、低 CPU 占用地监听系统事件，事件触发后自动在指定队列异步回调。相比 NSTimer/RunLoop，它高精度、线程安全、不依赖 RunLoop、可后台运行
+
+
+
 ## 例题
 
 ### 1
