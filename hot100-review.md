@@ -171,3 +171,175 @@ public:
     }
 };
 ```
+
+# 无重复字符的最长子串
+> 滑动窗口 双指针 哈希map
+```cpp
+class Solution {
+public:
+    int lengthOfLongestSubstring(string s) {
+        // 双指针 滑动串口
+        int len = s.size();
+        int l = 0;
+        int ans = 0;
+        unordered_map<int,int>mp;
+        for (int i = 0; i < len; ++i) {
+            if (mp[s[i]] == 0) {
+                mp[s[i]]++;
+                ans = max(ans, i - l + 1);
+            } else {
+                mp[s[i]]++;
+                while (l < i && s[l] != s[i]) {
+                    mp[s[l]]--;
+                    l++;
+                }
+                mp[s[l++]]--;
+                ans = max(ans, i - l + 1);
+            }
+        }
+        return ans;
+    }
+};
+```
+
+# 找到字符串中所有字母异位词
+> 滑动窗口 + 桶
+> s = "cbaebabacd", p = "abc"
+> 输出: [0,6] 返回起始索引为 0 和 6 的子串
+> 解释: 子串 "cba" 和 "bac" 是 "abc" 的字母异位词。
+
+```cpp
+class Solution {
+public:
+    vector<int> findAnagrams(string s, string p) {
+        // 定长滑动窗口
+        array<int, 26> mps{},mpp{};
+        vector<int>ans;
+        int lens = s.size();
+        int lenp = p.size();
+        if (lenp > lens) {
+            return ans;
+        }
+        for (char i : p) {
+            mpp[i - 'a']++;
+        }
+        for (int i = 0; i < lens; ++i) {
+            if (i >= lenp) {
+                mps[s[i]-'a']++;
+                mps[s[i - lenp]-'a']--;
+            } else {
+                mps[s[i]-'a']++;
+            }
+            int flag = 1;
+            if (mps == mpp) {
+                ans.push_back(i-lenp+1);
+            }
+        }
+        return ans;
+    }
+};
+```
+
+# 和为k的子数组
+> 前缀和 + 哈希map
+> nums = [1,1,1], k = 2 
+> 输出: 2
+> 解释: 子数组 [1,1]  [1,1] 为两种不同的情况。
+```cpp
+class Solution {
+public:
+    int subarraySum(vector<int>& nums, int k) {
+        unordered_map<long long,int>mp;
+        int ans = 0;
+        long long sum = 0;
+        mp[k] = 1;
+        for (int x : nums) {
+            sum += x;
+            if (mp.contains(sum)) {
+                ans += mp[sum];
+            }
+
+            mp[sum + k] += 1;
+        }
+        return ans;
+    }
+};
+```
+
+# 滑动窗口最大值
+> 单调队列
+```cpp
+class Solution {
+public:
+    vector<int> maxSlidingWindow(vector<int>& nums, int k) {
+        int left = 0;
+        int right = -1;
+        int sz = nums.size();
+        vector<int>q(sz, 0);
+        vector<int>ans; // 维护单调递减队列，队头为最大值
+        for (int i = 0; i < sz; ++i) {
+            while (right >= left && nums[q[right]] <= nums[i]) {
+                right--;
+            }
+            q[++right] = i;
+            if (right >= left && i - q[left] + 1 > k) {
+                left++;
+            }
+            if (i >= k - 1) {
+                ans.push_back(nums[q[left]]);
+            }
+        }
+        return ans;
+    }
+};
+```
+
+
+# 最小覆盖子串
+> 双指针 哈希map
+> s = "ADOBECODEBANC", t = "ABC"
+> 输出: "BANC"
+> 解释：最小覆盖子串 "BANC" 包含来自字符串 t 的 'A'、'B' 和 'C'。
+```cpp
+class Solution {
+public:
+    string minWindow(string s, string t) {
+        int lens = s.size();
+        int lent = t.size();
+        int mt[129]{};
+        int kinds = 0;
+        for(auto it : t) {
+            if (mt[it] == 0) kinds++;
+            mt[it]--; // 做差
+        }
+
+        int left = 0;
+        int mlen = 0x3f3f3f3f;
+        int st = 0;
+        int cnt = 0;
+        for (int right = 0; right < lens; ++right) { // 右节点一点点右移
+            mt[s[right]]++;
+            if (mt[s[right]] == 0) cnt++;
+            // 每右移一次校验可行性，可行的话尝试压缩
+            while (cnt == kinds) {
+                if (right - left + 1 < mlen) {
+                    mlen = right - left + 1;
+                    st = left;
+                }
+                if (mt[s[left]] == 0) cnt--;
+                mt[s[left]]--;
+                left++;
+            }
+        }   
+        if (mlen == 0x3f3f3f3f) return "";
+        return s.substr(st, mlen);
+    }
+};
+```
+
+
+# xxx
+>
+```cpp
+
+```
