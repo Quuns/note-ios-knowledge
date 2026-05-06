@@ -55,3 +55,149 @@
 
 
 ### 优化方法
+
+
+# GCD
+
+## 函数和队列
+
+### 函数
+- dispatch_async
+  - 将任务异步提交到指定队列，立即返回，不阻塞当前线程。任务会在队列对应的线程（主队列→主线程，其他队列→后台线程）中稍后执行。
+  - **不一定会创建子线程**。只是负责将任务提交到队列中，系统从线程池中复用线程在执行。如果队列是主队列，任务会在主线程中执行（依然异步）。**如果是全局并发队列或自定义串行/并发队列，才可能使用子线程**。
+- dispatch_sync
+  - 将任务同步提交到指定队列，**阻塞当前线程**，直到任务执行完成才继续。注意：若当前线程与目标队列是同一个串行队列，则发生死锁（如主线程往主队列同步提交任务）。
+  
+
+### 队列
+- dispatch_get_global_queue
+- dispatch_get_main_queue
+
+创建自定义串行队列
+-```objc
+dispatch_queue_t serialQueue = dispatch_queue_create("serialQueue", DISPATCH_QUEUE_SERIAL);
+```
+
+创建自定义并发队列
+-```objc
+dispatch_queue_t concurrentQueue = dispatch_queue_create("concurrentQueue", DISPATCH_QUEUE_CONCURRENT);
+```
+
+## 例题
+
+### 1
+```objc
+@property (nonatomic, assign) int num;
+- (void)test {
+    dispatch_queue_t t = dispatch_queue_create("testQueue", DISPATCH_QUEUE_CONCURRENT);
+    NSLog(@"1");
+    dispatch_async(t, ^{
+        NSLog(@"2");
+        dispatch_sync(t, ^{
+            NSLog(@"3");
+        });
+        NSLog(@"4");
+    });
+    NSLog(@"5");
+    dispatch_async(t, ^{
+        NSLog(@"6");
+    });
+
+    // 5在6前面，1在234前面。 2在3前面。3在4前面。 1在5前面。6和234无关系。
+    // 可能的答案 [1,5,2,3,4,6] [1,2,3,5,6,4]
+}
+```
+
+### 1.1
+```objc
+- (void)test {
+    dispatch_queue_t t = dispatch_queue_create("testQueue", DISPATCH_QUEUE_SERIAL);
+    NSLog(@"1");
+    dispatch_sync(t, ^{
+        NSLog(@"2");
+    });
+    dispatch_async(t, ^{
+        NSLog(@"3");
+        NSLog(@"4");
+    });
+    NSLog(@"5");
+    dispatch_async(t, ^{
+        NSLog(@"6");
+    });
+
+    // 1在2。 34在6前面。 5和34无关系。6一定在5后面
+    // 可能的答案 [1,2,5,3,4,6]
+}
+```
+
+### 1.2
+```objc
+- (void)test {
+    dispatch_queue_t t = dispatch_queue_create("testQueue", DISPATCH_QUEUE_SERIAL);
+    NSLog(@"1");
+    dispatch_sync(t, ^{
+        NSLog(@"2");
+    });
+    dispatch_async(t, ^{
+        NSLog(@"3");
+        NSLog(@"4");
+        dispatch_async(t, ^{
+            NSLog(@"7");
+        });
+    });
+    NSLog(@"5");
+    dispatch_async(t, ^{
+        NSLog(@"6");
+    });
+
+    // 可能的答案 [1,2,5,3,4,6,7] ? 有问题
+}
+```
+
+### 2
+```objc
+@property (nonatomic, assign) int num;
+- (void)test3 {
+    self.num = 0;
+    while (self.num < 100) {
+        dispatch_async(dispatch_get_global_queue(0, 0), ^{
+            self.num++;
+        });
+    } 
+    NSLog(@"num = %d", self.num);
+    // 最终输出的 num 值是不确定的，取决于运行时的线程调度、竞争严重程度和系统负载。通常情况下，最终结果会是一个 大于等于 100 的整数，且大多远大于 100（例如 200、500 甚至更多）
+    // 即使把 nonatomic 改为atomic, 也不能保证最终结果是 100. 因为 atomic 只保证 单个 self.num 的 getter 和 setter 是原子的（即读取或写入时不会被打断），但 不保证 self.num++ 的整体原子性
+}
+```
+
+### 3
+```objc
+@property (nonatomic, assign) int num;
+- (void)test4 {
+    self.num = 0;
+    for (int i = 0; i < 100; ++i) {
+        dispatch_async(dispatch_get_global_queue(0, 0), ^{
+            self.num++;
+        });
+    }
+    NSLog(@"num = %d", self.num);
+    // 答案最终 <= 100， 这里是开启的子线程，不会阻塞主线程的结果输出
+
+    // 若要最终输出的必须要刚好等于100，可以使用 dispatch_group + 递归锁 等待所有子线程执行完毕
+    self.num = 0;
+    dispatch_group_t group = dispatch_group_create();
+
+    for (int i = 0; i < 100; ++i) {
+        dispatch_group_enter(group);
+        dispatch_async(dispatch_get_global_queue(0, 0), ^{
+            @synchronized (self) {
+                self.num++;
+            }
+            dispatch_group_leave(group);
+        });
+    }
+
+    dispatch_group_wait(group, DISPATCH_TIME_FOREVER); // 作用是 阻塞当前线程（这里是主线程），直到 group 中的所有已加入任务全部执行完成。
+    NSLog(@"num = %d", self.num);  // 输出 100
+}
+```
