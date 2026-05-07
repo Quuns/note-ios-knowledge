@@ -338,7 +338,258 @@ public:
 ```
 
 
-# xxx
+# 最大字数和
+> dp 选或者不选
+```cpp
+class Solution {
+public:
+    int maxSubArray(vector<int>& nums) {
+        int pre = 0, maxAns = nums[0];
+        for (int x : nums) {
+            pre = max(pre + x, x);
+            maxAns = max(maxAns, pre);
+        }
+        return maxAns;
+    }
+};
+```
+
+# 合并区间
+> 排序 + 贪心
+
+> 输入：intervals = [[1,3],[2,6],[8,10],[15,18]]
+> 输出：[[1,6],[8,10],[15,18]]
+> 解释：区间 [1,3] 和 [2,6] 重叠, 将它们合并为 [1,6].
+```cpp
+class Solution {
+public:
+    vector<vector<int>> merge(vector<vector<int>>& intervals) {
+        ranges::sort(intervals); // 按照左端点从小到大排序
+        vector<vector<int>> ans;
+        for (auto& p : intervals) {
+            if (!ans.empty() && p[0] <= ans.back()[1]) { // 可以合并
+                ans.back()[1] = max(ans.back()[1], p[1]); // 更新右端点最大值
+            } else { // 不相交，无法合并
+                ans.emplace_back(p); // 新的合并区间
+            }
+        }
+        return ans;
+    }
+};
+```
+
+# 轮转数组
+> 翻转结论题
+
+> 输入: nums = [1,2,3,4,5,6,7], k = 3
+> 输出: [5,6,7,1,2,3,4]
+```cpp
+class Solution {
+public:
+    void rotate(vector<int>& nums, int k) {
+        k %= nums.size();
+        reverse(nums.begin(),nums.end());
+        reverse(nums.begin(),nums.begin()+k);
+        reverse(nums.begin()+k,nums.end());
+    }
+};
+```
+
+
+# 除了自身以外数组的乘积    
+> 前缀和
+> 输入: nums = [1,2,3,4]
+> 输出: [24,12,8,6]
+> 解释: 除 nums[i] 之外的所有元素的乘积为 [24,12,8,6]。
+```cpp
+class Solution {
+public:
+    vector<int> productExceptSelf(vector<int>& nums) {
+        int n = nums.size();
+        vector<int> suf(n);
+        suf[n - 1] = 1;
+        for (int i = n - 2; i >= 0; i--) {
+            suf[i] = suf[i + 1] * nums[i + 1];
+        }
+
+        int pre = 1;
+        for (int i = 0; i < n; i++) {
+            // 此时 pre 为 nums[0] 到 nums[i-1] 的乘积，直接乘到 suf[i] 中
+            suf[i] *= pre;
+            pre *= nums[i];
+        }
+
+        return suf;
+    }
+};
+```
+
+# 【***】缺失的第一个正数
+> 原地负数标记法求mex
+
+输入：nums = [1,2,0]
+输出：3
+
+输入：nums = [3,4,-1,1]
+输出：2
+
+```cpp
+class Solution {
+public:
+    int firstMissingPositive(vector<int>& nums) {
+        // 原地负数标记法求mex
+        int sz = nums.size();
+        for (auto & x : nums) {
+            if (!(x >= 1 && x <= sz)) {
+                x = sz + 1; // 把超出【1，n】的修改为n+1
+            }
+        }
+        for (auto & x : nums) {
+            int absx = abs(x); // 取绝对值
+            if (absx <= sz && nums[absx - 1] > 0) {
+                // 把对应的下标的数设置成负数
+                nums[absx - 1] = -nums[absx - 1];
+            }
+        }
+        for (int i = 0; i < sz; ++i) {
+            if (nums[i] > 0) {
+                // 第一个大于0的数 i + 1 就是mex
+                return i + 1;
+            }
+        }
+        // 如果全是负数，那么mex就是sz + 1
+        return sz + 1;
+    }
+};
+```
+
+
+# 矩阵置零
+> 原地标记法 如果一个元素为 0 ，则将其所在行和列的所有元素都设为 0 
+
+> 利用第一行第一列作为标记，避免重复标记
+```cpp
+class Solution {
+public:
+    void setZeroes(vector<vector<int>>& matrix) {
+        int n = matrix.size(), m = matrix[0].size();
+        bool col0 = 0, row0 = 0;
+        for (int i = 0; i < m; ++i) {
+            if (matrix[0][i] == 0) row0 = 1;
+        }
+        for (int i = 0; i < n; ++i) {
+            if (matrix[i][0] == 0) col0 = 1;
+        }
+        for (int i = 1; i < n; ++i) {
+            for (int j = 1; j < m; ++j) {
+                if (matrix[i][j] == 0) {
+                    matrix[i][0] = 0;
+                    matrix[0][j] = 0;
+                }
+            }
+        }
+        for (int i = 1; i < n; ++i) {
+            for (int j = 1; j < m; ++j) {
+                if (!matrix[i][0] || !matrix[0][j]) {
+                    matrix[i][j] = 0;
+                }
+            }
+        }
+        if (row0) {
+            for (int i = 0; i < m; ++i) {
+                matrix[0][i] = 0;
+            }
+        }
+        if (col0) {
+            for (int i = 0; i < n; ++i) {
+                matrix[i][0] = 0;
+            }
+        }
+    }
+};
+```
+
+
+# 螺旋矩阵
+>
+```cpp
+class Solution {
+public:
+    int dx[4] = {0, 1, 0, -1};
+    int dy[4] = {1, 0, -1, 0};
+    vector<int> spiralOrder(vector<vector<int>>& matrix) {
+        int n = matrix.size();
+        int m = matrix[0].size();
+        int sz = n * m;
+        vector<int>ans;
+        int st = 0;
+        int x = 0;
+        int y = -1;
+        for (int dr = 0, j = 0; j < sz; dr = (dr + 1) %4) {
+            for (int i = 0; i < m; ++i) {
+                int nx = x + dx[dr];
+                int ny = y + dy[dr];
+                x = nx; y = ny;
+                ans.push_back(matrix[nx][ny]);
+                j++;
+            }
+            n--;
+            swap(n,m);
+        }
+        return ans;
+    }
+};
+```
+
+
+# 旋转图像
+> 顺时针旋转90度，要求原地旋转。矩阵转置 +行翻转 = 顺时针旋转90度
+```cpp
+class Solution {
+public:
+    void rotate(vector<vector<int>>& matrix) {
+        int n = matrix.size();
+        // 转置
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < i; ++j) {
+                swap(matrix[i][j], matrix[j][i]);
+            }
+        }
+        // 行翻转
+        for (auto& row : matrix) {
+            ranges::reverse(row);
+        }
+    }
+};
+```
+
+# 搜索二维矩阵 II
+编写一个高效的算法来搜索 m x n 矩阵 matrix 中的一个目标值 target 。该矩阵具有以下特性：
+
+每行的元素从左到右升序排列。
+每列的元素从上到下升序排列。
+> 排除法。用右上角的元素来排除
+```cpp
+class Solution {
+public:
+    bool searchMatrix(vector<vector<int>>& matrix, int target) {
+        // 排除法
+        int n = matrix.size();
+        int m = matrix[0].size();
+        int x = 0;
+        int y = m - 1;
+        while (x <= n - 1 && y >= 0) {
+            if (matrix[x][y] == target) return true;
+            if (matrix[x][y] < target) x++;//排除行
+            else y--;//排除列
+        }
+        return false;
+    }
+};
+```
+
+
+# 
 >
 ```cpp
 
