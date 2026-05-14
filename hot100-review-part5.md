@@ -245,6 +245,191 @@ public:
 };
 ```
 
+# 有效的括号
+
+> 栈
+
+```cpp
+class Solution {
+public:
+    bool isValid(string s) {
+        stack<int>st;
+        for (char c : s) {
+            if (st.empty()) {
+                st.push(c);
+            } else {
+                if ((st.top() == '(' && c == ')') || (st.top() == '[' && c == ']') || (st.top() == '{' && c == '}')) {
+                    st.pop();
+                } else {
+                    st.push(c);
+                }
+            }
+        }
+        if (st.empty()) return true;
+        else return false;
+    }
+};
+```
+
+# 最小栈
+
+> 栈
+
+```cpp
+class MinStack {
+public:
+    stack<pair<int,int>>st;
+    MinStack() {
+        while(!st.empty())st.pop();
+        st.push({0, INT_MAX});
+    }
+    
+    void push(int val) {
+        st.push({val, min(getMin(), val)});
+    }
+    
+    void pop() {
+        st.pop();
+    }
+    
+    int top() {
+        return st.top().first;
+    }
+    
+    int getMin() {
+        return st.top().second;
+    }
+};
+
+/**
+ * Your MinStack object will be instantiated and called as such:
+ * MinStack* obj = new MinStack();
+ * obj->push(val);
+ * obj->pop();
+ * int param_3 = obj->top();
+ * int param_4 = obj->getMin();
+ */
+```
+
+
+# 字符串解码
+
+> 递归
+
+输入：s = "3[a2[c]]"
+
+输出："accaccacc"
+
+```cpp
+class Solution {
+public:
+    string decodeString(string s) {
+        string ans;
+        int len = s.size();
+        if (len == 0) return "";
+        if (s[0] >= '1' && s[0] <='9') {
+            // 首位是数字
+            int ilen = 0;
+            for (int i = 0; i < len; ++i) {
+                if (s[i] >= '0' && s[i] <= '9') {
+                    ilen++;
+                } else {
+                    break;
+                }
+            }
+            int cnt = stoi(s.substr(0, ilen));
+            int sum = 0; // [ +1  ] -1
+            int lpos = ilen;
+            int rpos = -1;
+            for (int  i = ilen; i < len; ++i) {
+                if (s[i] == '[') sum++;
+                else if (s[i] == ']')sum--;
+                if (sum == 0) {
+                    rpos = i;
+                    break;
+                }
+            }
+            string k = decodeString(s.substr(lpos + 1, rpos - 1 - lpos)); // 递归花括号内的子问题
+            for (int i = 0; i < cnt; ++i) ans += k;  
+            ans += decodeString(s.substr(rpos + 1)); //递归后边子问题
+        } else if (s[0] >= 'a' && s[0] <= 'z') {
+            // 首位是英文字母
+            ans += s[0];
+            ans += decodeString(s.substr(1)); // 递归后面的子问题
+        }
+        return ans;
+    }
+};
+```
+
+
+# 每日温度
+
+给定一个整数数组 temperatures ，表示每天的温度，返回一个数组 answer ，其中 answer[i] 是指对于第 i 天，下一个更高温度出现在几天后。如果气温在这之后都不会升高，请在该位置用 0 来代替。
+
+> 单调栈
+
+```cpp
+class Solution {
+public:
+    vector<int> dailyTemperatures(vector<int>& temperatures) {
+        vector<int>ans;
+        stack<int>st;
+        int sz = temperatures.size();
+        for (int i = sz - 1; i >= 0; i--) {
+            while (!st.empty() && (temperatures[st.top()] <= temperatures[i])) {
+                st.pop();
+            }
+            if (!st.empty()) {
+                ans.push_back(st.top() - i);
+            } else {
+                ans.push_back(0);
+            }
+            st.push(i);
+        }
+        ranges::reverse(ans);
+        return ans;
+    }
+};
+```
+
+
+# 柱状图中最大的矩形
+
+> 单调栈 两次遍历 找左右两边的第一个小于当前元素的索引
+
+```cpp
+class Solution {
+public:
+    int largestRectangleArea(vector<int>& heights) {
+        int ans = 0;
+        stack<int>st;
+        int sz = heights.size();
+        vector<int>pre(sz, 0);
+        
+        for (int i = 0; i < sz; ++i) {
+            while (!st.empty() && heights[st.top()] >= heights[i]) {
+                st.pop();
+            }
+            pre[i] = (st.empty() ? -1 : st.top());
+            st.push(i);
+        }
+        while (!st.empty())st.pop();
+        for (int i = sz - 1; i >= 0; --i) {
+            while (!st.empty() && heights[st.top()] >= heights[i]) {
+                st.pop();
+            }
+            int val = (st.empty() ? sz : st.top());
+            // cout << pre[i] << " " << val << endl;
+            ans = max(ans, (val - pre[i] - 1) * heights[i]);
+            st.push(i);
+        }
+        return ans;
+    }
+};
+```
+
+
 # 
 
 > 
