@@ -10,6 +10,93 @@ public:
         return nums[nums.size() - k];
     }
 };
+
+class Solution {
+    // 在子数组 [left, right] 中随机选择一个基准元素 pivot
+    // 根据 pivot 重新排列子数组 [left, right]
+    // 重新排列后，<= pivot 的元素都在 pivot 的左侧，>= pivot 的元素都在 pivot 的右侧
+    // 返回 pivot 在重新排列后的 nums 中的下标
+    // 特别地，如果子数组的所有元素都等于 pivot，我们会返回子数组的中心下标，避免退化
+    int partition(vector<int>& nums, int left, int right) {
+        // 1. 在子数组 [left, right] 中随机选择一个基准元素 pivot
+        int i = left + rand() % (right - left + 1);
+        int pivot = nums[i];
+        // 把 pivot 与子数组第一个元素交换，避免 pivot 干扰后续划分，从而简化实现逻辑
+        swap(nums[i], nums[left]);
+
+        // 2. 相向双指针遍历子数组 [left + 1, right]
+        // 循环不变量：在循环过程中，子数组的数据分布始终如下图
+        // [ pivot | <=pivot | 尚未遍历 | >=pivot ]
+        //   ^                 ^     ^         ^
+        //   left              i     j         right
+
+        i = left + 1;
+        int j = right;
+        while (true) {
+            while (i <= j && nums[i] < pivot) {
+                i++;
+            }
+            // 此时 nums[i] >= pivot
+
+            while (i <= j && nums[j] > pivot) {
+                j--;
+            }
+            // 此时 nums[j] <= pivot
+
+            if (i >= j) {
+                break;
+            }
+
+            // 维持循环不变量
+            swap(nums[i], nums[j]);
+            i++;
+            j--;
+        }
+
+        // 循环结束后
+        // [ pivot | <=pivot | >=pivot ]
+        //   ^             ^   ^     ^
+        //   left          j   i     right
+
+        // 3. 把 pivot 与 nums[j] 交换，完成划分（partition）
+        // 为什么与 j 交换？
+        // 如果与 i 交换，可能会出现 i = right + 1 的情况，已经下标越界了，无法交换
+        // 另一个原因是如果 nums[i] > pivot，交换会导致一个大于 pivot 的数出现在子数组最左边，不是有效划分
+        // 与 j 交换，即使 j = left，交换也不会出错
+        swap(nums[left], nums[j]);
+
+        // 交换后
+        // [ <=pivot | pivot | >=pivot ]
+        //               ^
+        //               j
+
+        // 返回 pivot 的下标
+        return j;
+    }
+
+public:
+    int findKthLargest(vector<int>& nums, int k) {
+        srand(time(NULL));
+        int n = nums.size();
+        int target_index = n - k; // 第 k 大元素在升序数组中的下标是 n - k
+        int left = 0, right = n - 1; // 闭区间
+        while (true) {
+            int i = partition(nums, left, right);
+            if (i == target_index) {
+                // 找到第 k 大元素
+                return nums[i];
+            }
+            if (i > target_index) {
+                // 第 k 大元素在 [left, i - 1] 中
+                right = i - 1;
+            } else {
+                // 第 k 大元素在 [i + 1, right] 中
+                left = i + 1;
+            }
+        }
+    }
+};
+
 ```
 
 # 前K个高频元素
@@ -294,72 +381,405 @@ public:
 
 # 打家劫舍
 
-> 
+你是一个专业的小偷，计划偷窃沿街的房屋。每间房内都藏有一定的现金，影响你偷窃的唯一制约因素就是相邻的房屋装有相互连通的防盗系统，如果两间相邻的房屋在同一晚上被小偷闯入，系统会自动报警。
+
+给定一个代表每个房屋存放金额的非负整数数组，计算你 不触动警报装置的情况下 ，一夜之内能够偷窃到的最高金额。
+
+> 动态规划 O(n)
 
 ```cpp
-
+class Solution {
+public:
+    int rob(vector<int>& nums) {
+        int sz = nums.size();
+        vector<int>dp;dp.resize(sz);
+        dp[0] = nums[0];
+        int ans = dp[0];
+        for(int i=1;i<sz;++i){
+            if (i >= 2) {
+                dp[i] = max(dp[i], dp[i-1]);
+                dp[i] = max(dp[i], nums[i] + dp[i-2]);
+            } else {
+                dp[i] = max(dp[i], nums[i]);
+                dp[i] = max(dp[i], nums[i-1]);
+            }
+            ans = max(ans, dp[i]);
+        }
+        return ans;
+    }
+};
 ```
 
 # 完全平方数
 
-> 
+> 动态规划 O(n^2)
 
 ```cpp
-
+class Solution {
+public:
+    int numSquares(int n) {
+        vector<int>dp(n + 1, 0x3f3f3f3f);
+        dp[0] = 0;
+        for (int i = 1; i * i <= n; ++i) dp[i * i] = 1;
+        for (int i = 1; i <= n; ++i) {
+            for (int j = 1; j * j <= n; ++j) {
+                if (i - j * j >= 0)dp[i] = min(dp[i], dp[i - j * j] + 1);
+            }
+        }
+        return dp[n];
+    }
+};
 ```
 
 # 零钱兑换
 
-> 
+> 动态规划 O(n^2)
 
 ```cpp
-
+class Solution {
+public:
+    int coinChange(vector<int>& coins, int amount) {
+        // dp[i] 凑成数字 i 的最小硬币数
+        vector<int>dp(amount + 1, 0x3f3f3f3f);
+        int sz = coins.size();
+        dp[0] = 0;
+        for (int i = 1; i <= amount; ++i) {
+            for (int j = 0; j < sz; ++j) {
+                if (i >= coins[j]) dp[i] = min(dp[i - coins[j]] + 1, dp[i]);
+            }
+        }
+        return (dp[amount] == 0x3f3f3f3f) ? -1 : dp[amount];
+    }
+};
 ```
 
 # 单词拆分 
 
-> 
+> 动态规划 O(n^2)
 
 ```cpp
-
+class Solution {
+public:
+    bool wordBreak(string s, vector<string>& wordDict) {
+        // dp[i] = 以i结尾的前缀是否能被完整划分
+        int sz = s.size();
+        vector<bool>dp(sz + 1, false);
+        dp[0] = true;
+        for (int i = 1; i <= sz; ++i) {
+            for (auto sub : wordDict) {
+                int len = sub.size();
+                if (i - len >= 0 && s.substr(i - len, len) == sub) {
+                    dp[i] = (dp[i] | dp[i-len]);
+                }
+            }
+        }
+        return dp[sz];
+    }
+};
 ```
 
-# 最长递增子序列
+# **最长递增子序列**
 
-> 
+> 动态规划 O(n^2) 
 
 ```cpp
+class Solution {
+public:
+    int lengthOfLIS(vector<int>& nums) {
+        int sz = nums.size();
+        int ans = -INT_MAX;
+        vector<int>dp(sz, 0);
+        for (int i = 0; i < sz; ++i) {
+            dp[i] = 1;
+            for (int j = 0; j < i; ++j) {
+                if (nums[i] > nums[j]) {
+                    dp[i] = max(dp[i], dp[j] + 1);
+                }
+            }
+            ans = max(ans, dp[i]);
+        }
+        return ans;
+    }
+};
+
+
+class Solution {
+public:
+    int lengthOfLIS(vector<int>& nums) {
+        // 二分
+        vector<int> g;
+        for (int x : nums) {
+            auto it = ranges::lower_bound(g, x);
+            if (it == g.end()) {
+                g.push_back(x); // >=x 的 g[j] 不存在
+            } else {
+                *it = x;
+            }
+        }
+        return g.size();
+    }
+};
 
 ```
 
 # 乘积最大子数组
 
-> 
+> 动态规划 O(n)
 
 ```cpp
-
+class Solution {
+public:
+    int maxProduct(vector<int>& nums) {
+        int n = nums.size();
+        vector<int> f_max(n), f_min(n);
+        f_max[0] = f_min[0] = nums[0];
+        for (int i = 1; i < n; i++) {
+            int x = nums[i];
+            // 把 x 加到右端点为 i-1 的（乘积最大/最小）子数组后面，
+            // 或者单独组成一个子数组，只有 x 一个元素
+            f_max[i] = max({f_max[i - 1] * x, f_min[i - 1] * x, x});
+            f_min[i] = min({f_max[i - 1] * x, f_min[i - 1] * x, x});
+        }
+        return ranges::max(f_max);
+    }
+};
 ```
 
 # 分割等和子集
 
-> 
+> bitset + dp
 
 ```cpp
-
+class Solution {
+public:
+    bool canPartition(vector<int>& nums) {
+        int sum = 0;
+        for (auto it : nums) {
+            sum += it;
+        }
+        if (sum % 2) return false;
+        int sz = nums.size();
+        bitset<10001>bs;
+        bs[0] = 1;
+        for (auto it : nums) {
+            bs |= bs << it;
+            if (bs[sum/2]) return true;// 优化
+        }
+        return false;
+    }
+};
 ```
 
 # 最长有效括号
 
-> 
+> 动态规划 O(n)
 
 ```cpp
-
+class Solution {
+public:
+    int longestValidParentheses(string s) {
+        int len = s.size();
+        int ans = 0;
+        vector<int>dp(len + 1, 0);
+        dp[0] = 0;
+        for (int i = 1; i < len; ++i) {
+            if (s[i] == ')') {
+                if (s[i-1] == '(') {
+                    if (i >= 2)dp[i] = dp[i-2] + 2;
+                    else {
+                        dp[i] = 2;
+                    }
+                } else {
+                    int pre = i - dp[i-1] - 1;
+                    if (pre >= 0 && s[pre] == '(') {
+                        if (pre - 1 >= 0)dp[i] = dp[pre - 1] + 2 + dp[i-1];
+                        else dp[i] = dp[i-1] + 2;
+                    }
+                }
+            }
+            ans = max(ans, dp[i]);
+        }
+        return ans;
+    }
+};
 ```
 
-# 
+# 不同路径
 
-> 
+> 动态规划 O(mn)
 
 ```cpp
+class Solution {
+public:
+    int uniquePaths(int m, int n) {
+        vector<vector<int>>dp(m,vector<int>(n, 0));
+        dp[0][0] = 1;
+        for (int i = 0; i < m; ++i) {
+            for (int j = 0; j < n; ++j) {
+                if (i - 1 >= 0) dp[i][j] += dp[i-1][j];
+                if (j - 1 >= 0) dp[i][j] += dp[i][j-1];
+            }
+        }
+        return dp[m - 1][n - 1];
+    }
+};
+```
 
+# 最小路径和
+
+给定一个包含非负整数的 m x n 网格 grid ，请找出一条从左上角到右下角的路径，使得路径上的数字总和为最小。
+
+说明：每次只能向下或者向右移动一步。
+
+> 动态规划 O(mn)
+
+```cpp
+class Solution {
+public:
+    int minPathSum(vector<vector<int>>& grid) {
+        int n = grid.size();
+        int m = grid[0].size();
+        vector<vector<int>>dp(n, vector<int>(m, 0x3f3f3f3f));
+        dp[0][0] = grid[0][0];
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < m; ++j) {
+                if (i - 1 >= 0) dp[i][j] = min(dp[i][j], dp[i-1][j] + grid[i][j]);
+                if (j - 1 >= 0) dp[i][j] = min(dp[i][j], dp[i][j-1] + grid[i][j]);
+            }
+        }
+        return dp[n-1][m-1];
+    }
+};
+```
+
+
+# 最长回文子串
+
+给你一个字符串 s，找到 s 中最长的 回文 子串。
+
+> 中心扩展法 O(n^2)
+
+```cpp
+class Solution {
+public:
+    string longestPalindrome(string s) {
+        int len = s.size();
+        string ans;
+        int mx = 0;
+        // 奇长度中点枚举
+        for (int i = 0; i < len; ++i) {
+            int L = i;
+            int R = i;
+            while (L >= 0 && R < len) {
+                if (s[L] == s[R]) {
+                    L--;
+                    R++;
+                } else {
+                    break;
+                }
+            }
+            L++;
+            R--;
+            if (R - L + 1 >= mx && L >= 0 && R < len) {
+                mx = max(mx, R - L + 1);
+                ans = s.substr(L, R - L + 1);
+            }
+        }
+        // 偶长度中点枚举
+        for (int i = 0; i < len - 1; ++i) {
+            int L = i;
+            int R = i + 1;
+            if (s[L] != s[R]) continue;
+            while (L >= 0 && R < len) {
+                if (s[L] == s[R]) {
+                    L--;
+                    R++;
+                } else {
+                    break;
+                }
+            }
+            L++;
+            R--;
+            if (R - L + 1 >= mx && L >= 0 && R < len) {
+                mx = max(mx, R - L + 1);
+                ans = s.substr(L, R - L + 1);
+            }
+        }
+        return ans;
+    }
+};
+```
+
+# 最长公共子序列
+
+> 动态规划 O(n^2)
+
+```cpp
+class Solution {
+public:
+    int longestCommonSubsequence(string text1, string text2) {
+        int n = text1.size();
+        int m = text2.size();
+        vector<vector<int>>dp(n + 1, vector<int>(m + 1, 0));
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < m; ++j) {
+                if (text1[i] == text2[j]) {
+                    dp[i+1][j+1] = dp[i][j] + 1;
+                } else {
+                    dp[i+1][j+1] = max(dp[i][j+1], dp[i+1][j]);
+                }
+            }
+        }
+        return dp[n][m];
+    }
+};
+```
+
+
+# 编辑距离
+
+
+给你两个单词 word1 和 word2， 请返回将 word1 转换成 word2 所使用的最少操作数  。
+
+你可以对一个单词进行如下三种操作：
+
+插入一个字符
+
+删除一个字符
+
+替换一个字符
+
+
+> 动态规划 O(n^2) + 记忆化搜索
+
+```cpp
+class Solution {
+public:
+    int minDistance(string word1, string word2) {
+        int n = word1.size();
+        int m = word2.size();
+        vector<vector<int>>memo(n, vector<int>(m, 0x3f3f3f3f));
+        auto dfs = [&](this auto&& dfs, int i, int j) -> int {
+            if (i < 0) {
+                // i 空 补
+                return j + 1;
+            }
+            if (j < 0) {
+                // j 空 删
+                return i + 1;
+            }
+            int& res = memo[i][j];
+            if (res != 0x3f3f3f3f) {
+                return res;
+            }
+            if (word1[i] == word2[j]) {
+                res = min(res, dfs(i-1,j-1)); // 匹配
+            } else {
+                res = min({res, dfs(i-1,j) + 1, dfs(i, j-1) + 1, dfs(i-1,j-1) + 1}); // 删除-插入-替换
+            }
+            return res;
+        };
+        return dfs(n-1,m-1);
+    }
+};
 ```
