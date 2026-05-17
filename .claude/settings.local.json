@@ -10,7 +10,22 @@
       "Bash(git stash *)",
       "Bash(git rebase *)",
       "Bash(git config *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "WebFetch(domain:www.yuque.com)",
+      "Bash(curl -sL --max-time 15 \"https://www.yuque.com/ioser/spb08a/nofps3\" -o /tmp/yuque_page.html)",
+      "Read(//tmp/**)",
+      "Bash(curl -skL --max-time 15 \"https://www.yuque.com/ioser/spb08a/nofps3\" -o /tmp/yuque_page.html)",
+      "Read(//private/tmp/**)",
+      "Bash(curl -skL --max-time 15 \"https://www.yuque.com/api/docs/nofps3?book_id=spb08a\" -H \"User-Agent: Mozilla/5.0\" -o /tmp/yuque_api.json)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 *)",
+      "Bash(curl -skL --max-time 15 'https://www.yuque.com/api/v2/repos/ioser/spb08a/docs/nofps3?raw=1' -H 'User-Agent: Mozilla/5.0' -H 'Accept: application/json' -o /tmp/yuque_v2.json)",
+      "Bash(curl -skL --max-time 15 https://www.yuque.com/api/lake/doc/12770155 -H 'User-Agent: Mozilla/5.0' -H 'Referer: https://www.yuque.com/ioser/spb08a/nofps3' -o /tmp/yuque_lake.json)",
+      "Bash(grep -c '```' /Users/didi/Desktop/ahaitext/note-ios-knowledge/interview-guide/ios-interview-essentials.md)",
+      "Bash(xxd)",
+      "Bash(awk *)",
+      "WebSearch",
+      "WebFetch(domain:forum.obsidian.md)"
     ]
   }
 }
