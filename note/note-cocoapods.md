@@ -12,14 +12,14 @@ CocoaPods 是 iOS/macOS 平台的**依赖管理工具**，类似 Java 的 Maven/
 
 ## 二、核心组件
 
-| 组件 | 容器 |
-|------|------|
-| CocoaPods | Ruby Gem 包，提供 `pod` 命令行工具 |
-| Specs Repo | Git 仓库，存放所有 Pod 的 `.podspec` 索引文件（如 `https://github.com/CocoaPods/Specs`） |
-| Podfile | 项目根目录下的依赖声明文件，由开发者编写 |
-| Podfile.lock | 锁定已安装 Pod 的具体版本，保证团队环境一致 |
-| .podspec | 单个 Pod 的描述文件，含名称、版本、源码地址、编译选项等 |
-| Pods.xcodeproj | CocoaPods 自动生成的工程，用于编译所有 Pod |
+| 组件             | 容器                                                                        |
+| -------------- | ------------------------------------------------------------------------- |
+| CocoaPods      | Ruby Gem 包，提供 `pod` 命令行工具                                                 |
+| Specs Repo     | Git 仓库，存放所有 Pod 的 `.podspec` 索引文件（如 `https://github.com/CocoaPods/Specs`） |
+| Podfile        | 项目根目录下的依赖声明文件，由开发者编写                                                      |
+| Podfile.lock   | 锁定已安装 Pod 的具体版本，保证团队环境一致                                                  |
+| .podspec       | 单个 Pod 的描述文件，含名称、版本、源码地址、编译选项等                                            |
+| Pods.xcodeproj | CocoaPods 自动生成的工程，用于编译所有 Pod                                              |
 
 ### Specs Repo 目录结构
 
@@ -46,35 +46,61 @@ pod install
     ├── 1. 解析 Podfile & Podfile.lock
     │     ├── 读取 Podfile 中的依赖声明
     │     └── 对比 Podfile.lock，判断哪些 Pod 需要安装/更新
+    │     📂 无产物（纯内存解析）
     │
     ├── 2. 依赖解析 (Resolver)
     │     ├── 从本地 Specs Repo (~/.cocoapods/repos/) 查找匹配版本
     │     ├── 使用 Molinillo 算法做依赖仲裁（类似 Bundler）
     │     └── 生成所有 Pod 的最终版本列表
+    │     📂 无产物（纯内存计算）
     │
     ├── 3. 下载源码
     │     ├── Git clone / tag / commit
     │     ├── HTTP download (.zip/.tar.gz)
     │     └── 本地路径 (path)
+    │     📂 产物：Pods/{每个Pod}/   （源码 + 头文件 + 资源）
     │
     ├── 4. 生成 Pods.xcodeproj
     │     ├── 为每个 Pod 创建 target
     │     ├── 根据 podspec 配置编译选项（header search paths、frameworks 等）
-    │     └── 生成 xcconfig 文件
+    │     └── 为每个 Pod 生成专属 xcconfig
+    │     📂 产物：Pods/Pods.xcodeproj/project.pbxproj
+    │            Pods/Target Support Files/{每个Pod}/*.xcconfig
     │
-    ├── 5. 生成 Pods-{Target}.xcconfig
+    ├── 5. 生成 Pods-{Target}.xcconfig（主工程级）
     │     ├── HEADER_SEARCH_PATHS（映射到 Pod 的头文件路径）
     │     ├── OTHER_LDFLAGS（-framework、-ObjC、-lc++ 等链接标志）
     │     ├── GCC_PREPROCESSOR_DEFINITIONS（Pod 级别的宏定义）
     │     └── FRAMEWORK_SEARCH_PATHS（vendored_frameworks 的路径）
+    │     📂 产物：Pods/Target Support Files/Pods-{Target}/
+    │            ├── Pods-{Target}.debug.xcconfig
+    │            ├── Pods-{Target}.release.xcconfig
+    │            ├── Pods-{Target}.modulemap
+    │            └── Pods-{Target}-umbrella.h
     │
     ├── 6. 更新 .xcworkspace
     │     ├── 整合主工程 .xcodeproj 和 Pods.xcodeproj
     │     └── 建立 target 间的隐式依赖关系
+    │     📂 产物：{Project}.xcworkspace/contents.xcworkspacedata
     │
     └── 7. 写入 Podfile.lock
           └── 锁定本次解析出的所有 Pod 精确版本 + CHECKSUM
+          📂 产物：Podfile.lock
 ```
+
+### 各步骤产物对照表
+
+| 步骤 | 做什么 | 产物（以 KFlower 工程为例） |
+|------|--------|---------------------------|
+| 1 | 解析 Podfile & Podfile.lock | 无（内存操作） |
+| 2 | Molinillo 依赖仲裁 | 无（内存操作） |
+| 3 | 下载源码 | `Pods/AFNetworking/`、`Pods/BEMCheckBox/` 等每个 Pod 一个目录 |
+| 4 | 生成 Pods.xcodeproj + 各 Pod 的 xcconfig | `Pods/Pods.xcodeproj/project.pbxproj`（所有 Pod 的 target 定义）<br>`Pods/Target Support Files/AFNetworking/*.xcconfig` 等 |
+| 5 | 生成主工程级 xcconfig | `Pods/Target Support Files/Pods-KFlower/Pods-KFlower.debug.xcconfig`<br>`Pods/Target Support Files/Pods-KFlower/Pods-KFlower.release.xcconfig`<br>`Pods/Target Support Files/Pods-KFlower/Pods-KFlower.modulemap`<br>`Pods/Target Support Files/Pods-KFlower/Pods-KFlower-umbrella.h` |
+| 6 | 整合 workspace | `KFlower.xcworkspace/contents.xcworkspacedata` |
+| 7 | 锁定版本 | `Podfile.lock` |
+
+> **第 4 步和第 5 步的区分**：第 4 步生成的是 Pod 级别的 xcconfig（每个 Pod 自己的编译设置），第 5 步生成的是主工程 Target 级别的 xcconfig（汇总所有 Pod 的 HEADER_SEARCH_PATHS、OTHER_LDFLAGS 等，注入到主工程）。前者在 `Pods/Target Support Files/{PodName}/` 下，后者在 `Pods/Target Support Files/Pods-{TargetName}/` 下。
 
 ---
 

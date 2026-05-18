@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "interview-guide/ios-interview-essentials.md",
+                "file": "note/note-博客汇总.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "ios-interview-essentials"
+              "title": "note-博客汇总"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "interview-guide/ios-interview-essentials.md",
+                "file": "note/note-博客汇总.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "ios-interview-essentials 的反向链接列表"
+              "title": "note-博客汇总 的反向链接列表"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "interview-guide/ios-interview-essentials.md",
+                "file": "note/note-博客汇总.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "ios-interview-essentials 的出链列表"
+              "title": "note-博客汇总 的出链列表"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "interview-guide/ios-interview-essentials.md",
+                "file": "note/note-博客汇总.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "ios-interview-essentials 的大纲"
+              "title": "note-博客汇总 的大纲"
             }
           }
         ]
@@ -187,8 +187,10 @@
   "lastOpenFiles": [
     "note/note-springboard.md",
     "note/note-cocoapods.md",
-    "note/note-nsnotificationcenter.md",
+    "note/note-associate-obje.md",
+    "note/note-auto-release-poll.md",
     "interview-guide/ios-interview-essentials.md",
+    "note/note-nsnotificationcenter.md",
     "interview-guide",
     "hot100-review/hot100-review-part7.md",
     "hot100-review/hot100-review-part6.md",
@@ -210,8 +212,6 @@
     "note/note-ios-respones-link.md",
     "note/note-kvo&kvc.md",
     "note/note-view-life.md",
-    "note/note-thread.md",
-    "hot100-review-part6.md",
-    "network.md"
+    "note/note-thread.md"
   ]
 }

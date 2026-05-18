@@ -367,18 +367,90 @@ App 开发者不直接使用这些 API，而是通过 **Background Modes** (Info
 
 ## 九、面试加分知识点
 
-### 9.1 XPC 通信
+### 9.1 XPC 通信（X Process Communication）
 
-SpringBoard 与各系统服务之间通过 **XPC**（跨进程通信）交互：
+#### 是什么
+
+XPC 是 Apple 设计的**跨进程通信（IPC）机制**，用于在同一台设备上的不同进程之间传递消息和数据。iOS 是严格的多进程系统，每个 App、每个系统服务（SpringBoard、backboardd、launchd 等）都是独立进程，拥有独立的地址空间，一个进程不能直接访问另一个进程的内存。SpringBoard 与各系统服务、各 App 之间的所有通信全部依赖 XPC。
+
+#### 底层原理
+
+```
+进程 A (SpringBoard)                    进程 B (launchd)
+      │                                       │
+      │  1. 创建 XPC 消息                      │
+      │     (dict: bundleID, action...)       │
+      │                                       │
+      │  2. 序列化为二进制                     │
+      │                                       │
+      ├───── Mach Port (内核传递) ────────────→│
+      │                                       │
+      │                              3. 接收并反序列化
+      │                              4. 执行对应操作
+      │                              5. 返回结果（可选）
+      │                                       │
+      │←───── Mach Port (内核传递) ────────────┤
+      │                                       │
+      │  6. 拿到返回结果                        │
+```
+
+核心层次：
+
+| 层次 | 组件 | 说明 |
+|------|------|------|
+| 内核层 | **Mach Port** | 最底层的通信原语，XPC 的物理基础 |
+| C 语言层 | **libxpc.dylib** | Apple 的 C 封装，提供 `xpc_connection_create`、`xpc_dictionary_create` 等 API |
+| ObjC/Swift 层 | **NSXPCConnection** | Foundation 框架的高层封装，把 XPC 消息转成方法调用 |
+
+#### 关键特性
 
 ```objc
-// XPC 特点（面试回答要点）
-// 1. 基于 Mach Port，由 libxpc.dylib 封装
-// 2. 异步、消息驱动
-// 3. 支持 out-of-line 数据传输（避免拷贝大块内存）
-// 4. 自动管理内存（dispatch_data_t）
-// 5. 比 NSNotification 更底层、更安全（进程隔离）
+// 面试回答要点
+// 1. 基于 Mach Port，由 libxpc.dylib 封装，上层用 NSXPCConnection
+// 2. 异步、消息驱动 — 发送后不阻塞，通过回调/block 处理响应
+// 3. 支持 out-of-line 数据传输 — 大数据块不拷贝，直接共享内核内存页（如 IOSurface）
+// 4. 自动内存管理 — 通过 dispatch_data_t 管理，无需手动 malloc/free
+// 5. 进程隔离更安全 — 一个进程崩溃不影响另一个，比 NSNotification 更底层
+// 6. 权限控制 — 通过 entitlements 限制谁能连接谁，App 只能连系统允许的服务
 ```
+
+#### XPC 在你 App 中的实际体现
+
+你写的 `AppDelegate` 生命周期回调，底层全是 XPC：
+
+```
+backboardd 检测到 Home 键
+    → Mach Port →
+SpringBoard 收到事件
+    → XPC 消息 →
+UIApplication 内部 XPC listener 收到信号
+    → UIKit 转调 →
+你的 AppDelegate 的 applicationDidEnterBackground:
+```
+
+SpringBoard 并不直接调用你的 `applicationDidEnterBackground:`，而是通过 UIApplication 内部隐藏的 XPC listener 接收信号后，再由 UIKit 框架转调给你的代码。
+
+#### XPC vs 其他通信方式
+
+| 方式 | 层级 | 跨进程 | 使用场景 |
+|------|------|--------|---------|
+| **XPC (NSXPCConnection)** | 系统底层 | ✅ | 系统服务间通信、App Extension 与宿主 App |
+| **NSNotification** | 应用层 | ❌ | 同一进程内的观察者模式 |
+| **Darwin Notification** | 系统层 | ✅ | 简单的跨进程通知（无数据负载） |
+| **URL Scheme** | 应用层 | ✅ | App 间跳转、传参 |
+| **App Groups + UserDefaults/File** | 应用层 | ✅ | App Extension 与宿主共享数据 |
+| **Mach Port（原始）** | 内核层 | ✅ | XPC 的底层基础 |
+
+#### 文章中 XPC 出现的场景
+
+回看本文，以下几处通信全部依赖 XPC：
+
+1. **SpringBoard → launchd**（App 启动链路第 3 步）：请求启动某个 Bundle ID 的进程
+2. **SpringBoard → App**（生命周期状态切换）：通知 App 进入后台、恢复前台等
+3. **SpringBoard ↔ backboardd**（事件分发）：接收硬件事件、分发触摸事件
+4. **SpringBoard ↔ RunningBoard**（iOS 13+ 进程管理）：进程断言管理、Jetsam 协调
+
+XPC 是整个 iOS 系统进程间通信的**神经系统**，SpringBoard 之所以能扮演"大管家"角色，正是因为它通过 XPC 与几乎所有其他进程保持着连接。
 
 ### 9.2 IOSurface 与渲染
 
