@@ -1026,6 +1026,260 @@ NSURLSessionDownloadTask *task =
 
 ---
 
+### 场景 33：下载 1000 张图片的设计方案
+
+**场景描述**：需要一次性下载 1000 张图片（如离线缓存包），要求高效、可控、不 OOM、支持进度回调。
+
+**考点分析**：综合性设计题，覆盖并发控制、内存管理、缓存策略、错误处理、进度追踪。
+
+---
+
+**1. 整体架构**
+
+```
+调用方
+  │
+  ▼
+ImageBatchDownloader（对外接口）
+  ├── 接收 URL 列表 + 配置（并发数、重试次数、超时）
+  ├── 统一回调：单张进度 / 总进度 / 全部完成
+  │
+  ▼
+DownloadCoordinator（调度层）
+  ├── NSOperationQueue（maxConcurrent = 4~6）
+  ├── 维护待下载 / 下载中 / 已完成 / 失败四个集合
+  ├── 失败重试逻辑（最多 2 次）
+  │
+  ▼
+ImageDownloadOperation（单张下载）
+  ├── NSURLSession dataTask（可 cancel）
+  ├── 下载到内存 → 解码 → 写入磁盘
+  └── 回调 coordinator 更新状态
+```
+
+---
+
+**2. 并发控制 — 为什么是 4~6？**
+
+```objc
+// 并发数不能太高也不能太低
+// 太高：带宽竞争、内存峰值大、HTTP/2 单连接并发有限
+// 太低：带宽利用率不足、总耗时过长
+// 4~6 是经验值，兼顾带宽利用与内存控制
+
+@property (nonatomic, strong) NSOperationQueue *downloadQueue;
+
+- (instancetype)init {
+    self = [super init];
+    _downloadQueue = [[NSOperationQueue alloc] init];
+    _downloadQueue.maxConcurrentOperationCount = 5; // 关键
+    return self;
+}
+```
+
+**追问：为什么用 NSOperationQueue 而不是 GCD？**
+
+> NSOperation 支持 cancel、依赖关系、优先级，方便单独控制每个下载任务。GCD 一旦 dispatch 就无法取消（除非自己实现 flag 判断）。
+
+---
+
+**3. 内存控制 — 边下边存，不堆积**
+
+核心思路：**下载完成一张 → 解码 → 写入磁盘 → 释放内存**，而不是等 1000 张全下完再处理。
+
+```objc
+@interface ImageDownloadOperation : NSOperation
+
+@property (nonatomic, copy) NSString *url;
+@property (nonatomic, copy) NSString *diskPath;  // 目标存储路径
+@property (nonatomic, copy) void(^progressBlock)(NSUInteger completed, NSUInteger total);
+
+@end
+
+@implementation ImageDownloadOperation
+
+- (void)main {
+    if (self.isCancelled) return;
+
+    // 1. 网络下载
+    NSData *data = [self downloadDataSync]; // 用信号量同步等待
+    if (!data || self.isCancelled) return;
+
+    // 2. 解码（这里会占用内存，但只针对单张图）
+    UIImage *image = [UIImage imageWithData:data];
+    if (!image) return;
+
+    // 3. 写入磁盘（JPEG 压缩可进一步控制体积）
+    NSData *jpegData = UIImageJPEGRepresentation(image, 0.85);
+    [jpegData writeToFile:self.diskPath atomically:YES];
+
+    // 4. data、image、jpegData 在 block 结束后自动释放
+    // 下一张图片开始前，这一张的内存已回收
+}
+
+@end
+```
+
+**追问：如果图片是 PNG 且超大（如单张 20MB），怎么优化？**
+
+> 不在内存中持有完整 UIImage，直接用 ImageIO 渐进式解码 + 逐块写入磁盘，避免峰值内存。或者不转为 UIImage，直接把下载的 `NSData` 落盘（缺点是无法验证图片合法性）。
+
+---
+
+**4. 进度回调 — 线程安全计数**
+
+```objc
+@interface DownloadCoordinator : NSObject
+
+@property (nonatomic, assign) NSUInteger totalCount;
+@property (nonatomic, assign) NSUInteger completedCount; // 注意线程安全
+@property (nonatomic, strong) dispatch_queue_t callbackQueue;
+
+@end
+
+// 每个 Operation 完成后回调
+- (void)onImageDownloaded:(NSString *)url success:(BOOL)success {
+    @synchronized(self) {
+        self.completedCount++;
+        NSUInteger done = self.completedCount;
+
+        dispatch_async(self.callbackQueue ?: dispatch_get_main_queue(), ^{
+            if (self.progressBlock) {
+                self.progressBlock(done, self.totalCount);
+            }
+
+            if (done == self.totalCount) {
+                if (self.completionBlock) {
+                    self.completionBlock(self.failedURLs);
+                }
+            }
+        });
+    }
+}
+```
+
+---
+
+**5. 取消 & 暂停 & 恢复**
+
+```objc
+// 取消全部 — NSOperationQueue 原生支持
+- (void)cancelAll {
+    [self.downloadQueue cancelAllOperations];
+}
+
+// 暂停 / 恢复 — 利用 suspended 属性
+- (void)pause {
+    self.downloadQueue.suspended = YES;
+}
+
+- (void)resume {
+    self.downloadQueue.suspended = NO;
+}
+```
+
+注意：`cancelAllOperations` 只是将队列中的 Operation 标记为 cancel，已经在执行的 Operation 需要在 `-main` 里自行检查 `self.isCancelled`。
+
+---
+
+**6. 失败重试 + 超时**
+
+```objc
+@interface ImageDownloadOperation : NSOperation
+@property (nonatomic, assign) NSInteger maxRetryCount;  // 默认 2
+@property (nonatomic, assign) NSTimeInterval timeout;     // 默认 30s
+@end
+
+@implementation ImageDownloadOperation
+
+- (void)main {
+    NSInteger retryLeft = self.maxRetryCount;
+
+    while (retryLeft >= 0) {
+        if (self.isCancelled) return;
+
+        NSData *data = [self downloadWithTimeout:self.timeout];
+        if (data) {
+            [self processAndSave:data];
+            return; // 成功
+        }
+
+        retryLeft--;
+        if (retryLeft >= 0) {
+            // 指数退避：第 1 次等 1s，第 2 次等 2s
+            sleep((int)(self.maxRetryCount - retryLeft + 1));
+        }
+    }
+
+    // 重试耗尽，标记失败
+    [self.coordinator onImageDownloaded:self.url success:NO];
+}
+
+- (NSData *)downloadWithTimeout:(NSTimeInterval)timeout {
+    __block NSData *result = nil;
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession]
+        dataTaskWithURL:[NSURL URLWithString:self.url]
+        completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
+            result = data;
+            dispatch_semaphore_signal(sem);
+        }];
+    [task resume];
+
+    // 超时控制
+    dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, timeout * NSEC_PER_SEC));
+    [task cancel]; // 超时取消
+    return result;
+}
+
+@end
+```
+
+---
+
+**7. 面试追问汇总**
+
+| 追问 | 回答要点 |
+|------|----------|
+| 并发数为什么是 4~6？ | HTTP/2 单连接并发限制、带宽竞争、内存峰值三者平衡 |
+| NSOperation vs GCD？ | cancel / 依赖 / 优先级，GCD 不具备 |
+| 1000 张下完内存峰值多少？ | 并发数 × 单张解码内存（约 5 × 8MB = 40MB） |
+| 如何避免重复下载？ | 下载前检查磁盘文件是否已存在（通过 URL hash 映射文件路径） |
+| 后台下载怎么做？ | NSURLSession background configuration，系统级调度，进程退出也继续 |
+| 下载中途杀进程重启怎么办？ | 持久化下载列表 + 已完成的 URL 集合，重启后跳过已完成的 |
+
+---
+
+**8. 完整对外接口**
+
+```objc
+@interface ImageBatchDownloader : NSObject
+
+/// 批量下载图片
+/// @param urls 图片 URL 数组
+/// @param destDir 目标存储目录（如 Library/Caches/offline_images）
+/// @param progress 总进度回调 (已完成数, 总数)
+/// @param completion 完成回调 (失败 URL 数组)
+- (void)downloadImages:(NSArray<NSString *> *)urls
+               destDir:(NSString *)destDir
+              progress:(void(^)(NSUInteger completed, NSUInteger total))progress
+            completion:(void(^)(NSArray<NSString *> *failedURLs))completion;
+
+/// 取消全部
+- (void)cancelAll;
+
+/// 暂停 / 恢复
+@property (nonatomic, assign, getter=isSuspended) BOOL suspended;
+
+/// 并发数（默认 5）
+@property (nonatomic, assign) NSInteger maxConcurrentDownloads;
+
+@end
+```
+
+---
+
 ## 面试速查表
 
 | 场景编号 | 关键词 | 核心考点 |
@@ -1045,3 +1299,4 @@ NSURLSessionDownloadTask *task =
 | 23 | Method Swizzling | +load 时机 + class_addMethod |
 | 24 | Category 加属性 | Associated Object |
 | 28 | 常驻线程 | RunLoop source / mode |
+| 33 | 批量下载 1000 张图片 | 并发控制 / 内存峰值 / NSOperation vs GCD / 失败重试 / 进度回调 |
